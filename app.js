@@ -1,76 +1,24 @@
-/* global supabase */
-(() => {
-  const SUPABASE_URL = window.__SUPABASE_URL__ || "https://pbtzrqptstpbwligsfjn.supabase.co";
-const DEFAULT_ANON_KEY = window.__SUPABASE_ANON_KEY__ || "";
-  const LS_KEY = "sb_anon_key_v1";
-  const CURRENCY = "₱";
+/* 2FLY Wholesale System (static site)
+   - Uses Supabase for products and image storage
+   - Uses config.js to set your project URL + anon key
+*/
 
-  const $ = (q, root = document) => root.querySelector(q);
-  const $$ = (q, root = document) => Array.from(root.querySelectorAll(q));
+const SUPABASE_URL = (window.__SUPABASE_URL__ || '').trim();
+const SUPABASE_ANON_KEY = (window.__SUPABASE_ANON_KEY__ || '').trim();
 
-  function getAnonKey() {
-    return (DEFAULT_ANON_KEY || localStorage.getItem(LS_KEY) || "").trim();
-  }
+let __sb = null;
 
-  function setAnonKey(key) {
-    localStorage.setItem(LS_KEY, (key || "").trim());
-  }
+function hasSupabase() {
+  return Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && window.supabase && typeof window.supabase.createClient === 'function');
+}
 
-  function hasSupabase() {
-    return typeof window.supabase !== "undefined" && typeof window.supabase.createClient === "function";
-  }
+function getSupabase() {
+  if (!hasSupabase()) return null;
+  if (!__sb) __sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  return __sb;
+}
 
-  function createSb() {
-    const key = getAnonKey();
-    if (!key || !hasSupabase()) return null;
-    return window.supabase.createClient(SUPABASE_URL, key);
-  }
-
-  function money(n) {
-    const num = Number(n || 0);
-    if (!Number.isFinite(num)) return `${CURRENCY}0`;
-    // keep it clean (no decimals for your pricing like 38)
-    const clean = Number.isInteger(num) ? num.toString() : num.toFixed(2);
-    return `${CURRENCY}${clean}`;
-  }
-
-  // ---------------- LANDING ----------------
-  function initLanding() {
-    const video = $("#landingVideo");
-    const enterBtn = $("#enterBtn");
-    const fade = $("#enterFade");
-    const soundBtn = $("#soundBtn");
-    const soundWaves = $("#soundWaves");
-
-    if (soundBtn && video) {
-      soundBtn.addEventListener("click", () => {
-        // user gesture -> allowed to unmute
-        const nowMuted = !video.muted;
-        video.muted = nowMuted;
-        if (!nowMuted) {
-          // going unmuted -> ensure playback
-          video.play().catch(() => {});
-        }
-        // waves visible only when unmuted
-        soundWaves.style.display = video.muted ? "none" : "";
-      });
-
-      // start muted, hide waves? (in your reference, speaker indicates tap)
-      video.muted = true;
-      soundWaves.style.display = "none";
-    }
-
-    if (enterBtn) {
-      enterBtn.addEventListener("click", () => {
-        fade.classList.add("is-on");
-        setTimeout(() => {
-          window.location.href = "./shop.html";
-        }, 320);
-      });
-    }
-  }
-
-  // ---------------- SHOP ----------------
+// ---------------- SHOP ----------------
   const cart = {
     items: [],
     // item: {id, name, price, code, sku, category, image, qty}
@@ -548,278 +496,261 @@ const DEFAULT_ANON_KEY = window.__SUPABASE_ANON_KEY__ || "";
   }
 
   // ---------------- ADMIN ----------------
-  function initAdmin() {
-    const gate = $("#adminKeyGate");
-    const keyInput = $("#adminAnonKeyInput");
-    const saveBtn = $("#adminSaveAnonKeyBtn");
+function initAdmin() {
+  const root = document.querySelector('[data-page="admin"]');
+  if (!root) return;
 
-    const msg = $("#adminMsg");
+  const sb = getSupabase();
+  const msgEl = document.getElementById('adminMsg');
 
-    if (!getAnonKey()) {
-      gate.hidden = false;
-      saveBtn.addEventListener("click", () => {
-        setAnonKey(keyInput.value);
-        gate.hidden = true;
-        window.location.reload();
+  const setMsg = (text, isErr = false) => {
+    if (!msgEl) return;
+    msgEl.textContent = text || '';
+    msgEl.style.color = isErr ? 'rgba(255,90,90,.95)' : 'rgba(255,255,255,.70)';
+  };
+
+  // If config.js isn't filled, do NOT show popups. Just show a clear message.
+  if (!sb) {
+    setMsg('Supabase not configured. Edit config.js and set your project URL + anon key.', true);
+
+    // Disable actions
+    const btn = document.getElementById('createProductBtn');
+    if (btn) btn.disabled = true;
+    const up = document.getElementById('uploadFilesBtn');
+    if (up) up.disabled = true;
+    const addUrl = document.getElementById('addUrlBtn');
+    if (addUrl) addUrl.disabled = true;
+    return;
+  }
+
+  // Elements
+  const aName = document.getElementById('aName');
+  const aPrice = document.getElementById('aPrice');
+  const aCode = document.getElementById('aCode');
+  const aSku = document.getElementById('aSku');
+  const aCategory = document.getElementById('aCategory');
+  const aStatus = document.getElementById('aStatus');
+  const aSoldOut = document.getElementById('aSoldOut');
+
+  const aImageUrl = document.getElementById('aImageUrl');
+  const addUrlBtn = document.getElementById('addUrlBtn');
+  const aFiles = document.getElementById('aFiles');
+  const uploadFilesBtn = document.getElementById('uploadFilesBtn');
+  const imgList = document.getElementById('imgList');
+
+  const createProductBtn = document.getElementById('createProductBtn');
+  const adminProducts = document.getElementById('adminProducts');
+
+  // Hide (or remove) setup gate if it exists
+  const gate = document.getElementById('adminKeyGate');
+  if (gate) gate.hidden = true;
+
+  // Image staging
+  let stagedImages = [];
+
+  const esc = (s) => String(s || '').replace(/[&<>\"']/g, (c) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+
+  function renderStaged() {
+    if (!imgList) return;
+    imgList.innerHTML = stagedImages.map((url, idx) => `
+      <div class="imgChip">
+        <img src="${esc(url)}" alt="" loading="lazy" />
+        <div class="imgChip__row">
+          <button class="imgChip__btn" type="button" data-rm="${idx}">Remove</button>
+          <span style="color:rgba(255,255,255,.45); font-size:11px;">${idx + 1}</span>
+        </div>
+      </div>
+    `).join('');
+
+    imgList.querySelectorAll('button[data-rm]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const i = Number(b.getAttribute('data-rm'));
+        stagedImages.splice(i, 1);
+        renderStaged();
       });
+    });
+  }
+
+  addUrlBtn?.addEventListener('click', () => {
+    const u = (aImageUrl?.value || '').trim();
+    if (!u) return;
+    stagedImages.push(u);
+    if (aImageUrl) aImageUrl.value = '';
+    renderStaged();
+  });
+
+  async function uploadOne(file) {
+    const safeName = String(file.name || 'image').replace(/[^a-z0-9_.-]/gi, '_');
+    const path = `public/products/${Date.now()}_${Math.random().toString(16).slice(2)}_${safeName}`;
+
+    const { error } = await sb.storage.from('product_images').upload(path, file, { upsert: false });
+    if (error) throw error;
+
+    const { data } = sb.storage.from('product_images').getPublicUrl(path);
+    return data?.publicUrl || '';
+  }
+
+  uploadFilesBtn?.addEventListener('click', async () => {
+    const files = Array.from(aFiles?.files || []);
+    if (!files.length) return;
+
+    uploadFilesBtn.disabled = true;
+    setMsg('Uploading images…');
+
+    try {
+      for (const f of files) {
+        const url = await uploadOne(f);
+        if (url) stagedImages.push(url);
+      }
+      if (aFiles) aFiles.value = '';
+      renderStaged();
+      setMsg('Images uploaded ✅');
+    } catch (e) {
+      console.error(e);
+      setMsg(`Upload failed: ${e?.message || e}`, true);
+    } finally {
+      uploadFilesBtn.disabled = false;
+    }
+  });
+
+  // Admin products list
+  async function loadAdminProducts() {
+    if (!adminProducts) return;
+    setMsg('Loading products…');
+
+    // Try to select sku/images; fallback if columns don't exist.
+    let query = sb.from('products')
+      .select('id, created_at, name, price, image_url, images, code, category, status, sold_out, sku')
+      .order('created_at', { ascending: false });
+
+    let { data, error } = await query;
+    if (error) {
+      ({ data, error } = await sb.from('products')
+        .select('id, created_at, name, price, image_url, code, category, status, sold_out')
+        .order('created_at', { ascending: false }));
+    }
+
+    if (error) {
+      console.error(error);
+      setMsg(`Load failed: ${error.message}`, true);
       return;
     }
-    gate.hidden = true;
 
-    const sb = createSb();
-    if (!sb) return;
+    setMsg('');
 
-    const imgList = $("#imgList");
-    let images = [];
+    const list = data || [];
+    adminProducts.innerHTML = list.map((p) => {
+      const img = (Array.isArray(p.images) && p.images[0]) ? p.images[0] : (p.image_url || '');
+      const meta = [
+        p.code ? `Code: ${p.code}` : null,
+        p.sku ? `SKU: ${p.sku}` : null,
+        p.category ? `Category: ${p.category}` : null,
+        `₱${Number(p.price || 0)}`,
+        p.status ? `Status: ${p.status}` : null,
+        p.sold_out ? 'SOLD OUT' : null,
+      ].filter(Boolean).join(' • ');
 
-    function renderImgList() {
-      imgList.innerHTML = "";
-      images.forEach((url, idx) => {
-        const chip = document.createElement("div");
-        chip.className = "imgChip";
-        chip.innerHTML = `
-          <img src="${escapeHtmlAttr(url)}" alt="" />
-          <div class="imgChip__row">
-            <span style="color:rgba(255,255,255,.55);font-size:12px;">#${idx+1}</span>
-            <button class="imgChip__btn" type="button" data-rm="${idx}">Remove</button>
-          </div>
-        `;
-        chip.querySelector("[data-rm]")?.addEventListener("click", () => {
-          images.splice(idx, 1);
-          renderImgList();
-        });
-        imgList.appendChild(chip);
-      });
-    }
-
-    $("#addUrlBtn")?.addEventListener("click", () => {
-      const u = ($("#aImageUrl")?.value || "").trim();
-      if (!u) return;
-      images.push(u);
-      $("#aImageUrl").value = "";
-      renderImgList();
-    });
-
-    $("#uploadFilesBtn")?.addEventListener("click", async () => {
-      const files = $("#aFiles")?.files;
-      if (!files || !files.length) return;
-
-      msg.textContent = "Uploading…";
-      for (const file of files) {
-        const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
-        const path = `public/uploads/${Date.now()}_${Math.random().toString(16).slice(2)}.${ext}`;
-
-        const { error: upErr } = await sb.storage.from("product_images").upload(path, file, {
-          cacheControl: "3600",
-          upsert: false
-        });
-        if (upErr) {
-          console.error(upErr);
-          msg.textContent = `Upload failed: ${upErr.message}`;
-          return;
-        }
-
-        const { data: pub } = sb.storage.from("product_images").getPublicUrl(path);
-        if (pub?.publicUrl) images.push(pub.publicUrl);
-      }
-      renderImgList();
-      msg.textContent = "Uploaded ✅";
-      $("#aFiles").value = "";
-    });
-
-    $("#createProductBtn")?.addEventListener("click", async () => {
-      const name = ($("#aName")?.value || "").trim();
-      const price = Number(($("#aPrice")?.value || "").trim());
-      const code = ($("#aCode")?.value || "").trim();
-      const sku = ($("#aSku")?.value || "").trim();
-      const category = ($("#aCategory")?.value || "Earrings").trim();
-      const status = ($("#aStatus")?.value || "active").trim();
-      const sold_out = !!$("#aSoldOut")?.checked;
-
-      if (!name || !Number.isFinite(price)) {
-        msg.textContent = "Name + valid price required.";
-        return;
-      }
-
-      msg.textContent = "Creating…";
-
-      const payload = {
-        name,
-        price,
-        code: code || null,
-        sku: sku || null,
-        category,
-        status,
-        sold_out,
-        // keep compatibility with old column too
-        image_url: images[0] || null,
-        images: images.length ? images : null
-      };
-
-      const { error } = await sb.from("products").insert(payload);
-      if (error) {
-        console.error(error);
-        msg.textContent = `Error: ${error.message}`;
-        return;
-      }
-
-      msg.textContent = "Created ✅";
-      // reset
-      ["#aName","#aPrice","#aCode","#aSku","#aImageUrl"].forEach(s => { const el = $(s); if (el) el.value=""; });
-      $("#aCategory").value = "Earrings";
-      $("#aStatus").value = "active";
-      $("#aSoldOut").checked = false;
-      images = [];
-      renderImgList();
-      await loadAdminProducts();
-    });
-
-    async function loadAdminProducts() {
-      const wrap = $("#adminProducts");
-      wrap.innerHTML = "Loading…";
-
-      const { data, error } = await sb
-        .from("products")
-        .select("id,name,price,code,sku,category,status,sold_out,image_url,images,created_at")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        console.error(error);
-        wrap.innerHTML = `Error: ${escapeHtml(error.message)}`;
-        return;
-      }
-
-      wrap.innerHTML = "";
-      (data || []).forEach(p => {
-        const item = document.createElement("div");
-        item.className = "adminItem";
-
-        const imgs = Array.isArray(p.images) ? p.images.filter(Boolean) : [];
-        const imgPreview = (imgs[0] || p.image_url || "");
-
-        item.innerHTML = `
+      return `
+        <div class="adminItem">
           <div class="adminItem__top">
             <div>
-              <div class="adminItem__name">${escapeHtml(p.name || "")}</div>
-              <div class="adminItem__meta">
-                ${escapeHtml(p.category || "Earrings")} • ${escapeHtml(p.status || "active")} • ${p.sold_out ? "sold_out" : "in_stock"} • ${money(p.price)}
-                ${p.sku ? ` • SKU: ${escapeHtml(p.sku)}` : ""} ${p.code ? ` • Code: ${escapeHtml(p.code)}` : ""}
-              </div>
+              <div class="adminItem__name">${esc(p.name || '')}</div>
+              <div class="adminItem__meta">${esc(meta)}</div>
+              ${img ? `<div style="margin-top:10px;"><img src="${esc(img)}" alt="" style="width:120px;height:84px;object-fit:cover;border:1px solid rgba(255,255,255,.12);"/></div>` : ''}
             </div>
             <div class="adminItem__btns">
-              <button class="btn btn--ghost" type="button" data-edit="${p.id}">Edit</button>
-              <button class="btn btn--solid" type="button" data-del="${p.id}">Delete</button>
+              <button class="btn btn--ghost" type="button" data-del="${p.id}">Delete</button>
             </div>
           </div>
-          ${imgPreview ? `<div style="margin-top:10px;"><img src="${escapeHtmlAttr(imgPreview)}" style="width:120px;height:120px;object-fit:cover;border:1px solid rgba(255,255,255,.12)"/></div>` : ""}
-          <div class="adminEdit" hidden data-panel="${p.id}" style="margin-top:12px;">
-            <div class="adminGrid">
-              <input class="input" data-f="name" value="${escapeHtmlAttr(p.name || "")}" />
-              <input class="input" data-f="price" value="${escapeHtmlAttr(p.price || "")}" />
-              <input class="input" data-f="code" value="${escapeHtmlAttr(p.code || "")}" placeholder="Code" />
-              <input class="input" data-f="sku" value="${escapeHtmlAttr(p.sku || "")}" placeholder="SKU" />
-              <select class="input" data-f="category">
-                <option ${String(p.category).toLowerCase()==="earrings"?"selected":""} value="Earrings">Earrings</option>
-                <option ${String(p.category).toLowerCase()==="necklaces"?"selected":""} value="Necklaces">Necklaces</option>
-                <option ${String(p.category).toLowerCase()==="boxers"?"selected":""} value="Boxers">Boxers</option>
-              </select>
-              <select class="input" data-f="status">
-                <option ${String(p.status).toLowerCase()==="active"?"selected":""} value="active">active</option>
-                <option ${String(p.status).toLowerCase()==="inactive"?"selected":""} value="inactive">inactive</option>
-              </select>
-              <label class="checkRow">
-                <input type="checkbox" data-f="sold_out" ${p.sold_out ? "checked":""} />
-                <span>Sold out</span>
-              </label>
-              <input class="input" data-f="images" value="${escapeHtmlAttr((Array.isArray(p.images)&&p.images.length?p.images.join(", "):""))}" placeholder="images[] URLs comma-separated" />
-            </div>
-            <div style="display:flex;gap:10px;margin-top:10px;">
-              <button class="btn btn--solid" type="button" data-save="${p.id}">Save</button>
-              <button class="btn btn--ghost" type="button" data-cancel="${p.id}">Cancel</button>
-            </div>
-          </div>
-        `;
+        </div>
+      `;
+    }).join('');
 
-        item.querySelector("[data-edit]")?.addEventListener("click", () => {
-          item.querySelector(`[data-panel="${p.id}"]`)?.toggleAttribute("hidden");
-        });
+    adminProducts.querySelectorAll('button[data-del]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const id = btn.getAttribute('data-del');
+        if (!id) return;
 
-        item.querySelector("[data-cancel]")?.addEventListener("click", () => {
-          item.querySelector(`[data-panel="${p.id}"]`)?.setAttribute("hidden", "");
-        });
-
-        item.querySelector("[data-del]")?.addEventListener("click", async () => {
-          if (!confirm("Delete this product?")) return;
-          const { error: delErr } = await sb.from("products").delete().eq("id", p.id);
-          if (delErr) {
-            alert(delErr.message);
-            return;
-          }
-          await loadAdminProducts();
-        });
-
-        item.querySelector("[data-save]")?.addEventListener("click", async () => {
-          const panel = item.querySelector(`[data-panel="${p.id}"]`);
-          const fields = {};
-          panel.querySelectorAll("[data-f]").forEach(el => {
-            const f = el.getAttribute("data-f");
-            if (f === "sold_out") fields[f] = !!el.checked;
-            else fields[f] = (el.value || "").trim();
-          });
-
-          const upd = {
-            name: fields.name,
-            price: Number(fields.price),
-            code: fields.code || null,
-            sku: fields.sku || null,
-            category: fields.category || "Earrings",
-            status: fields.status || "active",
-            sold_out: !!fields.sold_out
-          };
-
-          // images parsing
-          const imgRaw = (fields.images || "").trim();
-          const arr = imgRaw ? imgRaw.split(",").map(s => s.trim()).filter(Boolean) : [];
-          upd.images = arr.length ? arr : null;
-          upd.image_url = arr[0] || null;
-
-          const { error: upErr } = await sb.from("products").update(upd).eq("id", p.id);
-          if (upErr) {
-            alert(upErr.message);
-            return;
-          }
-          await loadAdminProducts();
-        });
-
-        wrap.appendChild(item);
+        setMsg('Deleting…');
+        const { error: delErr } = await sb.from('products').delete().eq('id', id);
+        if (delErr) {
+          console.error(delErr);
+          setMsg(`Delete failed: ${delErr.message}`, true);
+          return;
+        }
+        setMsg('Deleted ✅');
+        loadAdminProducts();
       });
+    });
+  }
+
+  // Create product
+  createProductBtn?.addEventListener('click', async () => {
+    const name = (aName?.value || '').trim();
+    const price = Number((aPrice?.value || '').trim());
+    const code = (aCode?.value || '').trim();
+    const sku = (aSku?.value || '').trim();
+    const category = (aCategory?.value || 'Earrings');
+    const status = (aStatus?.value || 'active');
+    const sold_out = Boolean(aSoldOut?.checked);
+
+    if (!name) return setMsg('Name is required.', true);
+    if (!Number.isFinite(price) || price <= 0) return setMsg('Price must be a number (e.g. 38).', true);
+
+    const images = stagedImages.slice();
+    const image_url = images[0] || null;
+
+    createProductBtn.disabled = true;
+    setMsg('Creating product…');
+
+    // Try with sku/images; fallback if table doesn't have those columns.
+    let payload = { name, price, code, category, status, sold_out, image_url, images, sku };
+
+    let { error } = await sb.from('products').insert(payload);
+
+    if (error && /column .*sku/i.test(error.message || '')) {
+      delete payload.sku;
+      ({ error } = await sb.from('products').insert(payload));
+    }
+    if (error && /column .*images/i.test(error.message || '')) {
+      delete payload.images;
+      ({ error } = await sb.from('products').insert(payload));
     }
 
+    if (error) {
+      console.error(error);
+      setMsg(`Create failed: ${error.message}`, true);
+      createProductBtn.disabled = false;
+      return;
+    }
+
+    setMsg('Created ✅');
+
+    // Reset
+    if (aName) aName.value = '';
+    if (aPrice) aPrice.value = '';
+    if (aCode) aCode.value = '';
+    if (aSku) aSku.value = '';
+    if (aCategory) aCategory.value = 'Earrings';
+    if (aStatus) aStatus.value = 'active';
+    if (aSoldOut) aSoldOut.checked = false;
+    stagedImages = [];
+    renderStaged();
+
+    createProductBtn.disabled = false;
     loadAdminProducts();
+  });
 
-    function escapeHtml(s) {
-      return String(s)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
-    function escapeHtmlAttr(s) { return escapeHtml(s || ""); }
-  }
+  // First load
+  loadAdminProducts();
+}
 
-  // ---------------- Bootstrap ----------------
-  function bootstrap() {
-    const page = document.body?.dataset?.page;
+function bootstrap() {
+  const page = document.body?.dataset?.page;
+  if (page === 'shop') initShop();
+  if (page === 'admin') initAdmin();
+}
 
-    if (page === "landing") initLanding();
-    if (page === "shop") initShop();
-    if (page === "admin") initAdmin();
-  }
-
-  // expose these for shop UI usage
-  window.__updateCartUI = updateCartUI;
-  window.__money = money;
-
-  document.addEventListener("DOMContentLoaded", bootstrap);
-})();
+document.addEventListener('DOMContentLoaded', bootstrap);
