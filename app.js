@@ -1,6 +1,6 @@
 /* global supabase */
 (() => {
-  const SUPABASE_URL = (window.__SUPABASE_URL__ || "https://pbtzrqptstpbwligsfjn.supabase.co");
+    const SUPABASE_URL = (window.__SUPABASE_URL__ || '').trim();
   const LS_KEY = "sb_anon_key_v1";
   const CURRENCY = "₱";
 
@@ -15,14 +15,36 @@
     localStorage.setItem(LS_KEY, (key || "").trim());
   }
 
+  function inferUrlFromAnonKey(key){
+    try{
+      const parts = String(key || '').split('.');
+      if (parts.length < 2) return '';
+      const b64 = parts[1].replace(/-/g,'+').replace(/_/g,'/');
+      const pad = '='.repeat((4 - (b64.length % 4)) % 4);
+      const jsonStr = atob(b64 + pad);
+      const payload = JSON.parse(jsonStr);
+      if (!payload || !payload.ref) return '';
+      return `https://${payload.ref}.supabase.co`;
+    }catch(_){
+      return '';
+    }
+  }
+
+
   function hasSupabase() {
     return typeof window.supabase !== "undefined" && typeof window.supabase.createClient === "function";
   }
 
   function createSb() {
     const key = getAnonKey();
-    if (!SUPABASE_URL || !key || !hasSupabase()) return null;
-    return window.supabase.createClient(SUPABASE_URL, key);
+    if (!key || !hasSupabase()) return null;
+
+    const inferred = inferUrlFromAnonKey(key);
+    let url = SUPABASE_URL || inferred || '';
+    if (inferred && url && !url.includes(inferred.replace('https://',''))) url = inferred;
+
+    if (!url) return null;
+    return window.supabase.createClient(url, key);
   }
 
   function money(n) {
@@ -124,29 +146,7 @@
     return Math.max(min, n);
   }
 
-  function initKeyGateShop() {
-    const gate = $("#keyGate");
-    const input = $("#anonKeyInput");
-    const btn = $("#saveAnonKeyBtn");
-
-    const key = getAnonKey();
-    if (!key) {
-      gate.hidden = false;
-      btn.addEventListener("click", () => {
-        setAnonKey(input.value);
-        window.location.reload();
-      });
-      return false;
-    }
-    gate.hidden = true;
-    return true;
-  }
-
   function initShop() {
-    if (!initKeyGateShop()) {
-      // still allow UI to load, but no products
-    }
-
     loadCart();
     wireCartUI();
 
