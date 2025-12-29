@@ -754,3 +754,35 @@ function bootstrap() {
 }
 
 document.addEventListener('DOMContentLoaded', bootstrap);
+function initLanding(){
+  const enterBtn = document.getElementById('enterBtn') || document.getElementById('enterNowBtn');
+  const video = document.getElementById('landingVideo') || document.getElementById('bgVideo');
+  const soundBtn = document.getElementById('soundBtn');
+  const fade = document.getElementById('enterFade') || document.getElementById('transition');
+
+  if (fade) fade.style.pointerEvents = 'none';
+
+  function goShop(){
+    if (fade) fade.classList.add('show');
+    setTimeout(() => { window.location.href = 'shop.html'; }, 520);
+  }
+
+  if (enterBtn){
+    enterBtn.addEventListener('click', goShop);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Enter') goShop(); });
+  }
+
+  if (soundBtn && video){
+    const label = document.getElementById('soundLabel');
+    const sync = () => { if (label) label.textContent = video.muted ? 'SOUND OFF' : 'SOUND ON'; };
+    sync();
+    soundBtn.addEventListener('click', async () => {
+      video.muted = !video.muted;
+      try { await video.play(); } catch(_) {}
+      sync();
+    });
+  }
+}
+
+
+  if (page === 'landing') initLanding();
