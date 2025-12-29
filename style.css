@@ -143,14 +143,21 @@ body{
   cursor:pointer;
 }
 .cartBadge svg{ width:19px; height:19px; fill:#fff; opacity:.95; }
-.cartBadge__count{
+.cartBadge__count {
   position:absolute;
-  inset:0;
+  top:-6px;
+  right:-6px;
+  width:20px;
+  height:20px;
   display:grid;
   place-items:center;
-  font-family:var(--fontHead);
+  border-radius:999px;
+  background:rgba(0,0,0,.85);
+  border:1px solid rgba(255,255,255,.20);
+  color:#fff;
   font-weight:800;
-  font-size:14px;
+  font-size:11px;
+  line-height:1;
 }
 
 /* ---------------- Hero ---------------- */
@@ -242,18 +249,15 @@ body{
 }
 
 .footerBar{
-  position:absolute;
-  left:0; right:0; bottom:0;
-  height:56px;
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  color:rgba(255,255,255,.35);
-  letter-spacing:.22em;
-  text-transform:uppercase;
-  font-size:11px;
-  background:rgba(0,0,0,.35);
-  border-top:1px solid rgba(255,255,255,.06);
+  width: 100%;
+  padding: 22px 0;
+  text-align: center;
+  color: rgba(255,255,255,.35);
+  letter-spacing: .24em;
+  text-transform: uppercase;
+  font-size: 11px;
+  border-top: 1px solid rgba(255,255,255,.10);
+  background: rgba(0,0,0,.35);
 }
 
 /* ---------------- Sections & Grid ---------------- */

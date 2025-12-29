@@ -5,15 +5,11 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>2FLY!GALLERIA — Shop</title>
   <link rel="stylesheet" href="./style.css" />
-  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-<script>
-  window.__SUPABASE_URL__ = "https://pbtzrqptstpbwligsfjn.supabase.co";
-  window.__SUPABASE_ANON_KEY__ = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9jY2JvaG5ucWphd3hqemhyZGNrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjY5MzgzODYsImV4cCI6MjA4MjUxNDM4Nn0.31Wjm7ZideyoNZ9N2JFz93iHcoDocHT8ahdy54KtsOA";
-</script>
+  <script src="./config.js"></script>
+<script src="https://unpkg.com/@supabase/supabase-js@2"></script>
   <script src="./app.js" defer></script>
 </head>
 <body class="page-shop" data-page="shop">
-</div>
 
   <header class="topbar">
     <div class="topbar__left">
@@ -36,10 +32,11 @@
     <div class="hero__bg"></div>
 
     <div class="hero__content">
-      <div class="categoryPills" id="categoryPills">
+      <div class="categoryPills">
         <button class="pill is-active" data-filter="Earrings" type="button">EARRINGS</button>
         <button class="pill" data-filter="Necklaces" type="button">NECKLACES</button>
         <button class="pill" data-filter="Boxers" type="button">BOXERS</button>
+        <button class="pill" data-filter="ALL" type="button">VIEW ALL</button>
       </div>
 
       <div class="statsStrip">
@@ -60,10 +57,7 @@
       <a class="joinBtn" href="https://m.me/cm/AbYv958c_1Ex59E-/?send_source=cm:copy_invite_link" target="_blank" rel="noreferrer">
         JOIN 2FLY RESELLER COMMUNITY NOW
       </a>
-    </div>
-
-    <div class="footerBar">© 2FLY!GALLERIA • WHOLESALE SUPPLIER • PH NATIONWIDE</div>
-  </section>
+    </div></section>
 
   <section class="section">
     <h2 class="sectionTitle">LATEST DROP</h2>
@@ -71,6 +65,8 @@
     <div id="productsGrid" class="grid"></div>
     <div id="emptyState" class="empty" hidden>No products yet.</div>
   </section>
+
+  <footer class="footerBar">© 2FLY!GALLERIA • WHOLESALE SUPPLIER • PH NATIONWIDE</footer>
 
   <!-- PRODUCT MODAL (hidden by default) -->
   <div id="productModal" class="modal" aria-hidden="true">
